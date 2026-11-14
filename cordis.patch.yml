@@ -1,0 +1,29 @@
+# dsh-model-lens bundle patch.
+# Host half discovers local AI services by scanning loopback ports, polls them,
+# serves the snapshot/HUD pages, and registers the HUD with dsh-pet when its
+# petApi7340.hud API exists.
+- insert:
+    - id: dsh-model-lens
+      name: dsh-model-lens
+      config:
+        pollMs: 2000
+        scan: true
+        scanPorts: null
+        endpoints: []
+        gpu: true
+        # Optional explicit endpoints. `tag` labels an otherwise unknown model
+        # type; `log` enables request-rate counting from an access log.
+        # `start` enables the hover 加载/卸载 control (process tree).
+        # endpoints:
+        #   - { id: asr, kind: stt, base: 'http://127.0.0.1:10095', log: '/path/to/server.log' }
+        #   - { id: rcv, kind: openai, base: 'http://127.0.0.1:9000/v1', tag: RCV }
+        #   - id: tts
+        #     kind: tts
+        #     base: 'http://127.0.0.1:9880'
+        #     model: GPT-SoVITS
+        #     start:
+        #       command: '<path-to-python>'
+        #       args: ['api_v2.py', '-a', '127.0.0.1', '-p', '9880']
+        #       cwd: '<path-to-app>'
+        #       timeoutMs: 180000
+        #     stop: { mode: tree, timeoutMs: 15000 }

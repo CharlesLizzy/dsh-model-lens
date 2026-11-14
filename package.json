@@ -1,0 +1,66 @@
+{
+  "name": "dsh-model-lens",
+  "version": "0.3.3",
+  "description": "A compact local model status and resource panel for DSH, with an optional dsh-pet HUD.",
+  "license": "MIT",
+  "author": "CharlesLizzy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CharlesLizzy/dsh-model-lens.git"
+  },
+  "homepage": "https://github.com/CharlesLizzy/dsh-model-lens#readme",
+  "bugs": {
+    "url": "https://github.com/CharlesLizzy/dsh-model-lens/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-pet",
+    "local-models",
+    "monitor",
+    "hud"
+  ],
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./assets/icon-256.png"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/*.js",
+    "pet/*.html",
+    "pet/*.js",
+    "pet/reactions/*",
+    "tools/*.mjs",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "assets/*.png",
+    "assets/*.svg",
+    "icon.svg",
+    "screenshots.json",
+    "README.md",
+    "CREDITS.md",
+    "LICENSE"
+  ],
+  "icon": "./assets/icon-256.png",
+  "engines": {
+    "node": ">=22"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  }
+}

@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark" />
+    <title>本地模型监控</title>
+    <style>
+      :root {
+        --fs: 13px;
+        --fg: #2b2b2b;
+        --fg2: #6b7280;
+        --fg3: #8a8f98;
+        --bg: rgba(255, 255, 255, 0.93);
+        --line: rgba(0, 0, 0, 0.07);
+        --chip: rgba(0, 0, 0, 0.055);
+        --shadow: 0 6px 22px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.08);
+        --green: #22c55e;
+        --grey: #94a3b8;
+        --empty: #cbd5e1;
+        --amber: #f59e0b;
+        --red: #ef4444;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        overflow: hidden;
+        font-family: var(--pet-family, "Microsoft YaHei UI", "Segoe UI", sans-serif);
+        font-size: var(--fs);
+        line-height: 1.5;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #card {
+        width: 100%;
+        padding: 11px 14px 10px;
+        border-radius: 14px;
+        background: var(--bg);
+        color: var(--fg);
+        box-shadow: var(--shadow);
+        position: relative;
+        clip-path: inset(0 0 0 0 round 14px);
+        transition: background 0.2s ease, color 0.2s ease, clip-path 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      #card.collapsed {
+        clip-path: inset(calc(100% - 33px) 3px 3px calc(100% - 33px) round 15px);
+      }
+      body[data-anchor="right"] #card.collapsed {
+        clip-path: inset(calc(100% - 33px) calc(100% - 33px) 3px 3px round 15px);
+      }
+      #card.cutscene {
+        transition-duration: 90ms;
+      }
+      .hud-body {
+        opacity: 1;
+        transform: translateY(0);
+        transition: opacity 0.14s ease, transform 0.18s ease;
+      }
+      #card.collapsed .hud-body {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+      .hud-toggle {
+        position: fixed;
+        bottom: 3px;
+        right: 3px;
+        z-index: 5;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border-radius: 50%;
+        border: 1px solid rgba(15, 23, 42, 0.14);
+        background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.9));
+        color: #475569;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font: inherit;
+        line-height: 1;
+        cursor: pointer;
+        pointer-events: auto;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18), 0 1px 2px rgba(15, 23, 42, 0.12);
+        transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      body[data-anchor="left"] .hud-toggle { right: 3px; }
+      body[data-anchor="right"] .hud-toggle { left: 3px; right: auto; }
+      body.dark .hud-toggle {
+        border-color: rgba(255, 255, 255, 0.16);
+        background: linear-gradient(145deg, rgba(55, 60, 68, 0.98), rgba(31, 34, 39, 0.94));
+        color: #cbd5e1;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+      }
+      .hud-toggle:hover {
+        transform: scale(1.06);
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.24), 0 1px 3px rgba(15, 23, 42, 0.16);
+      }
+      .hud-toggle:active { transform: scale(0.94); }
+      .hud-toggle:focus-visible {
+        outline: 2px solid var(--green);
+        outline-offset: 2px;
+      }
+      .hud-chevron {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.18s ease;
+      }
+      body.collapsed .hud-chevron { transform: rotate(180deg); }
+      #card.light { --bg: #f3f4f6; box-shadow: 0 6px 22px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.05); }
+      #card.dark {
+        --fg: #e5e7eb;
+        --fg2: #9ca3af;
+        --fg3: #9ca3af;
+        --bg: rgba(30, 32, 36, 0.92);
+        --line: rgba(255, 255, 255, 0.12);
+        --chip: rgba(255, 255, 255, 0.08);
+        --shadow: 0 6px 22px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2);
+      }
+      .head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+      .title { flex: 1; font-size: 1.02em; font-weight: 600; }
+      .badge {
+        flex: none;
+        font-size: 0.82em;
+        color: var(--fg2);
+        background: var(--chip);
+        border-radius: 999px;
+        padding: 1px 7px;
+        white-space: nowrap;
+      }
+      .row { display: flex; align-items: center; gap: 6px; height: 1.75em; min-width: 0; }
+      .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--grey); }
+      .dot.active { background: var(--green); animation: pulse 1.6s ease-out infinite; }
+      .dot.unloaded { background: var(--empty); }
+      .dot.loading { background: var(--amber); }
+      .dot.offline { background: var(--red); }
+      .tag {
+        flex: none;
+        font-size: 0.76em;
+        line-height: 1.4;
+        color: var(--fg2);
+        background: var(--chip);
+        border-radius: 4px;
+        padding: 0 4px;
+      }
+      .name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.97em;
+      }
+      .val {
+        flex: none;
+        color: var(--fg2);
+        font-size: 0.88em;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .empty { color: var(--fg2); font-size: 0.9em; padding: 2px 0 4px; }
+      .act {
+        flex: none;
+        width: 62px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        pointer-events: auto;
+        cursor: default;
+      }
+      html, body { pointer-events: auto; }
+      #card { pointer-events: none; }
+      .act { pointer-events: auto; }
+      .act.pending { pointer-events: none;
+      }
+      .act .metric {
+        color: var(--fg2);
+        font-size: 0.88em;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .act .btn {
+        display: none;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--chip);
+        color: var(--fg);
+        font: inherit;
+        font-size: 0.84em;
+        line-height: 1.5;
+        padding: 0 7px;
+        cursor: pointer;
+      }
+      .act:hover .metric { display: none; }
+      .act:hover .btn { display: inline-flex; }
+      .act.pending .metric, .act.pending .btn { display: none; }
+      .act.pending .pending-label { display: inline-flex; }
+      .pending-label {
+        display: none;
+        align-items: center;
+        gap: 4px;
+        color: var(--fg2);
+        font-size: 0.84em;
+        white-space: nowrap;
+      }
+      .spin {
+        width: 9px;
+        height: 9px;
+        border: 1.5px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .modal {
+        position: fixed;
+        left: 8px;
+        right: 8px;
+        top: 8px;
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.98);
+        color: #2b2b2b;
+        border-radius: 10px;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.06);
+        padding: 10px;
+        pointer-events: auto;
+        font-size: 12px;
+      }
+      .modal[hidden] { display: none; }
+      .modal-title { font-weight: 600; margin-bottom: 6px; }
+      .modal label { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; color: #6b7280; font-size: 11px; }
+      .modal input {
+        font: inherit;
+        color: #2b2b2b;
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, 0.16);
+        border-radius: 6px;
+        padding: 3px 6px;
+      }
+      .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+      .modal-actions button {
+        font: inherit;
+        border: 1px solid rgba(0, 0, 0, 0.16);
+        border-radius: 6px;
+        background: #fff;
+        padding: 2px 10px;
+        cursor: pointer;
+      }
+      .modal-actions button#cfg-save { background: #247bbf; border-color: #247bbf; color: #fff; }
+      .foot {
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px solid var(--line);
+        color: var(--fg2);
+        font-size: 0.86em;
+        font-variant-numeric: tabular-nums;
+        padding-right: 38px;
+      }
+      body[data-anchor="right"] .foot { padding-left: 38px; padding-right: 0; }
+      .foot div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
+        70% { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .dot.active { animation: none; }
+        .spin { animation: none; }
+        #card, .hud-body, .hud-toggle, .hud-chevron { transition: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="card">
+      <div class="hud-body">
+        <div class="head">
+          <span class="title">本地模型</span>
+          <span class="badge" id="badge">…</span>
+        </div>
+        <div id="rows"><div class="empty">载入中…</div></div>
+        <div class="foot" id="foot"></div>
+      </div>
+    </div>
+    <button class="hud-toggle" id="hud-toggle" type="button" aria-label="收起状态卡" aria-expanded="true">
+      <span class="hud-chevron">
+        <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
+          <path d="M5 8l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </span>
+    </button>
+    <div id="config-modal" class="modal" hidden>
+      <div class="modal-title">配置启动命令</div>
+      <label>命令<input id="cfg-command" placeholder="python.exe" /></label>
+      <label>参数<input id="cfg-args" placeholder="空格分隔" /></label>
+      <label>工作目录<input id="cfg-cwd" placeholder="可选" /></label>
+      <div class="modal-actions">
+        <button id="cfg-cancel" type="button">取消</button>
+        <button id="cfg-save" type="button">保存</button>
+      </div>
+    </div>
+    <script>
+      (function () {
+        'use strict'
+        var q = new URLSearchParams(location.search)
+        var petFont = Number(q.get('petFont')) || 13
+        var petFamily = q.get('petFamily') || ''
+        var allowControl = q.get('control') === '1'
+        var controlToken = q.get('token') || ''
+        var anchor = q.get('anchor') === 'right' ? 'right' : 'left'
+        var collapsed = false
+        var confirmStop = null
+        if (petFamily) document.documentElement.style.setProperty('--pet-family', petFamily)
+
+        var prefs = { theme: 'pet', fontScale: 'auto', maxRows: 6 }
+        var qTheme = q.get('theme')
+        var qFs = q.get('fs')
+        var qRows = q.get('rows')
+        if (qTheme === 'dark' || qTheme === 'light' || qTheme === 'pet') prefs.theme = qTheme
+        if (qFs === 'auto') prefs.fontScale = 'auto'
+        else if (qFs && Number.isFinite(Number(qFs))) prefs.fontScale = Number(qFs)
+        if (qRows && Number.isFinite(Number(qRows))) prefs.maxRows = Number(qRows)
+        var card = document.getElementById('card')
+        var badge = document.getElementById('badge')
+        var hudToggle = document.getElementById('hud-toggle')
+        var rows = document.getElementById('rows')
+        var foot = document.getElementById('foot')
+        var modal = document.getElementById('config-modal')
+        var cfgCommand = document.getElementById('cfg-command')
+        var cfgArgs = document.getElementById('cfg-args')
+        var cfgCwd = document.getElementById('cfg-cwd')
+        var editingId = null
+        var CUTSCENE_CONTACT_MS = 2500
+        var CUTSCENE_COLLAPSE_MS = 5000
+        var CUTSCENE_END_MS = 8500
+        var cutsceneTimers = []
+        var cutscene = false
+
+        function applyToggleState() {
+          document.body.dataset.anchor = anchor
+          document.body.classList.toggle('collapsed', collapsed)
+          card.classList.toggle('collapsed', collapsed)
+          if (hudToggle) {
+            hudToggle.setAttribute('aria-expanded', String(!collapsed))
+            hudToggle.setAttribute('aria-label', collapsed ? '展开状态卡' : '收起状态卡')
+          }
+        }
+
+        function clearCutsceneTimers() {
+          for (var i = 0; i < cutsceneTimers.length; i += 1) clearTimeout(cutsceneTimers[i])
+          cutsceneTimers = []
+        }
+
+        function cancelCutscene() {
+          clearCutsceneTimers()
+          cutscene = false
+          card.classList.remove('cutscene')
+        }
+
+        function onPetAction() {
+          if (cutscene || !collapsed || (modal && !modal.hidden)) return
+          cutscene = true
+          card.classList.add('cutscene')
+          cutsceneTimers.push(setTimeout(function () {
+            setCollapsed(false, { cutscene: true })
+          }, CUTSCENE_CONTACT_MS))
+          cutsceneTimers.push(setTimeout(function () {
+            setCollapsed(true, { cutscene: true })
+          }, CUTSCENE_COLLAPSE_MS))
+          cutsceneTimers.push(setTimeout(function () {
+            cutscene = false
+            card.classList.remove('cutscene')
+            if (!collapsed) setCollapsed(true, { cutscene: true })
+          }, CUTSCENE_END_MS))
+        }
+
+        function setCollapsed(next) {
+          collapsed = Boolean(next)
+          applyToggleState()
+          postHeight()
+        }
+        function applyPrefs() {
+          var fs = prefs.fontScale === 'auto' ? petFont : Number(prefs.fontScale) || petFont
+          fs = Math.max(10, Math.min(20, fs))
+          document.documentElement.style.setProperty('--fs', fs + 'px')
+          card.classList.remove('light', 'dark')
+          document.body.classList.remove('light', 'dark')
+          if (prefs.theme === 'dark') {
+            card.classList.add('dark')
+            document.body.classList.add('dark')
+          } else if (prefs.theme === 'light') {
+            card.classList.add('light')
+            document.body.classList.add('light')
+          }
+          applyToggleState()
+          postHeight()
+        }
+
+        function postHeight() {
+          var box = card.getBoundingClientRect()
+          var height = Math.ceil(Math.max(box.height, card.scrollHeight))
+          parent.postMessage({ type: 'dsh-model-lens:height', height: height }, '*')
+          postHotspots()
+        }
+
+        function postHotspots() {
+          var rects = []
+          if (hudToggle) {
+            var tr = hudToggle.getBoundingClientRect()
+            if (tr.width > 0 && tr.height > 0) rects.push({ x: tr.x, y: tr.y, width: tr.width, height: tr.height })
+          }
+          if (!collapsed) {
+            var acts = document.querySelectorAll('.act')
+            for (var i = 0; i < acts.length; i += 1) {
+              if (acts[i].classList.contains('pending')) continue
+              var r = acts[i].getBoundingClientRect()
+              if (r.width > 0 && r.height > 0) {
+                rects.push({ x: r.x, y: r.y, width: r.width, height: r.height })
+              }
+            }
+          }
+          if (modal && !modal.hidden) {
+            var mr = modal.getBoundingClientRect()
+            if (mr.width > 0 && mr.height > 0) rects.push({ x: mr.x, y: mr.y, width: mr.width, height: mr.height })
+          }
+          parent.postMessage({ type: 'dsh-model-lens:hotspots', rects: rects }, '*')
+        }
+
+        function gb(mb) {
+          return (Number(mb) / 1024).toFixed(1)
+        }
+
+        function metricText(model) {
+          if (model.status === 'active') {
+            if (model.latencyMs) return model.latencyMs + 'ms'
+            if (model.reqPerMin > 0) return model.reqPerMin + '/分'
+            return '调用中'
+          }
+          if (model.status === 'idle') return model.reqPerMin > 0 ? model.reqPerMin + '/分' : '空闲'
+          if (model.status === 'unloaded') return '未加载'
+          if (model.status === 'loading') return '加载中'
+          return '离线'
+        }
+
+        async function postAction(id, action, failText) {
+          try {
+            var response = await fetch('/dsh-model-lens/api/services/' + encodeURIComponent(id) + '/' + action, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', 'x-dsh-model-lens-token': controlToken },
+              body: '{}',
+            })
+            if (!response.ok) {
+              var data = await response.json().catch(function () { return {} })
+              badge.textContent = data.error || failText
+            }
+            load()
+          } catch (error) {
+            badge.textContent = failText
+          }
+        }
+
+        function doAction(id, action) {
+          postAction(id, action, '操作失败')
+        }
+
+        function doExternalStop(id) {
+          postAction(id, 'stop-external', '停止失败')
+        }
+
+        function openConfig(id) {
+          cancelCutscene()
+          setCollapsed(false)
+          editingId = id
+          cfgCommand.value = ''
+          cfgArgs.value = ''
+          cfgCwd.value = ''
+          modal.hidden = false
+          postHotspots()
+          cfgCommand.focus()
+        }
+
+        function closeConfig() {
+          editingId = null
+          modal.hidden = true
+          postHotspots()
+        }
+
+        async function saveConfig() {
+          if (!editingId) return
+          try {
+            var response = await fetch(
+              '/dsh-model-lens/api/monitor/endpoints/' + encodeURIComponent(editingId) + '/start-command',
+              {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', 'x-dsh-model-lens-token': controlToken },
+                body: JSON.stringify({
+                  command: cfgCommand.value,
+                  args: cfgArgs.value,
+                  cwd: cfgCwd.value,
+                  timeoutMs: 180000,
+                }),
+              },
+            )
+            if (!response.ok) {
+              var data = await response.json().catch(function () { return {} })
+              badge.textContent = data.error || '配置失败'
+              return
+            }
+            closeConfig()
+            load()
+          } catch (error) {
+            badge.textContent = '配置失败'
+          }
+        }
+
+        function actionSlot(model) {
+          var control = model.control
+          var el = document.createElement('span')
+          el.className = 'act'
+          if (control.error) el.title = control.error
+          if (control.pending) {
+            el.classList.add('pending')
+            var spin = document.createElement('span')
+            spin.className = 'spin'
+            var label = document.createElement('span')
+            label.className = 'pending-label'
+            label.appendChild(spin)
+            label.appendChild(document.createTextNode(control.pending === 'starting' ? '启动中' : '停止中'))
+            el.appendChild(label)
+            return el
+          }
+          var metric = document.createElement('span')
+          metric.className = 'metric'
+          metric.textContent = metricText(model)
+          el.appendChild(metric)
+          var button = document.createElement('button')
+          button.className = 'btn'
+          button.type = 'button'
+          if (control.canStart) {
+            button.textContent = '加载'
+            button.addEventListener('click', function (event) {
+              event.stopPropagation()
+              doAction(control.id, 'start')
+            })
+          } else if (control.canStop) {
+            button.textContent = '卸载'
+            button.addEventListener('click', function (event) {
+              event.stopPropagation()
+              var now = Date.now()
+              if (confirmStop && confirmStop.id === control.id && now < confirmStop.until) {
+                confirmStop = null
+                doAction(control.id, 'stop')
+                return
+              }
+              confirmStop = { id: control.id, until: now + 3000 }
+              button.textContent = '确认'
+              setTimeout(function () {
+                if (confirmStop && confirmStop.id === control.id) {
+                  confirmStop = null
+                  button.textContent = '卸载'
+                }
+              }, 3000)
+            })
+          } else if (control.canStopExternal) {
+            button.textContent = '停止'
+            button.title = control.stopMode === 'command' ? '调用停止命令' : '按端口结束监听进程'
+            button.addEventListener('click', function (event) {
+              event.stopPropagation()
+              var now = Date.now()
+              if (confirmStop && confirmStop.id === control.id && now < confirmStop.until) {
+                confirmStop = null
+                doExternalStop(control.id)
+                return
+              }
+              confirmStop = { id: control.id, until: now + 3000 }
+              button.textContent = '确认'
+              setTimeout(function () {
+                if (confirmStop && confirmStop.id === control.id) {
+                  confirmStop = null
+                  button.textContent = '停止'
+                }
+              }, 3000)
+            })
+          } else if (control.canConfigure) {
+            button.textContent = '配置启动命令'
+            button.addEventListener('click', function (event) {
+              event.stopPropagation()
+              openConfig(control.id)
+            })
+          } else {
+            return null
+          }
+          el.appendChild(button)
+          return el
+        }
+
+        function row(model) {
+          var el = document.createElement('div')
+          el.className = 'row'
+          var dot = document.createElement('span')
+          dot.className = 'dot ' + (model.status || 'idle')
+          el.appendChild(dot)
+          if (model.tag) {
+            var tag = document.createElement('span')
+            tag.className = 'tag'
+            tag.textContent = model.tag
+            el.appendChild(tag)
+          }
+          var name = document.createElement('span')
+          name.className = 'name'
+          name.textContent = model.name || model.key || '?'
+          el.appendChild(name)
+          var slot = allowControl && model.primary && model.control ? actionSlot(model) : null
+          if (slot) {
+            el.appendChild(slot)
+          } else {
+            var val = document.createElement('span')
+            val.className = 'val'
+            val.textContent = metricText(model)
+            el.appendChild(val)
+          }
+          return el
+        }
+
+        function render(data) {
+          var summary = data.summary || {}
+          var total = Number(summary.total) || 0
+          var active = Number(summary.active) || 0
+          var offline = Number(summary.offline) || 0
+          if (total === 0) badge.textContent = '无服务'
+          else if (active > 0) badge.textContent = active + ' 调用中'
+          else if (offline >= total) badge.textContent = '全部离线'
+          else badge.textContent = (total - offline) + '/' + total + ' 在线'
+
+          rows.textContent = ''
+          var list = Array.isArray(data.models) ? data.models : []
+          if (list.length === 0) {
+            var empty = document.createElement('div')
+            empty.className = 'empty'
+            empty.textContent = data.ok === false ? '监控异常' : '未发现本地模型'
+            rows.appendChild(empty)
+          } else {
+            var limit = Math.max(3, Math.min(12, Number(prefs.maxRows) || 6))
+            for (var i = 0; i < Math.min(list.length, limit); i += 1) rows.appendChild(row(list[i]))
+            if (list.length > limit) {
+              var more = document.createElement('div')
+              more.className = 'empty'
+              more.textContent = '+' + (list.length - limit) + ' 个模型'
+              rows.appendChild(more)
+            }
+          }
+
+          foot.textContent = ''
+          var system = data.system || {}
+          var gpu = Array.isArray(system.gpu) && system.gpu.length > 0 ? system.gpu[0] : null
+          if (gpu) {
+            var line1 = document.createElement('div')
+            line1.textContent = 'GPU ' + Math.round(gpu.util || 0) + '% · 显存 ' + gb(gpu.memUsedMb) + '/' + gb(gpu.memTotalMb) + 'G'
+            foot.appendChild(line1)
+          }
+          var line2 = document.createElement('div')
+          line2.textContent = 'CPU ' + Math.round(system.cpuPct || 0) + '% · 内存 ' + gb(system.memUsedMb) + '/' + gb(system.memTotalMb) + 'G'
+          foot.appendChild(line2)
+          postHeight()
+        }
+
+        function fail() {
+          badge.textContent = '未连接'
+          rows.textContent = ''
+          var empty = document.createElement('div')
+          empty.className = 'empty'
+          empty.textContent = '监控服务未响应'
+          rows.appendChild(empty)
+          foot.textContent = ''
+          postHeight()
+        }
+
+        async function loadPrefs() {
+          try {
+            var response = await fetch('/dsh-model-lens/api/prefs', { cache: 'no-store' })
+            if (!response.ok) return
+            var data = await response.json()
+            if (data && data.prefs) {
+              prefs = data.prefs
+              applyPrefs()
+            }
+          } catch {}
+        }
+
+        async function load() {
+          try {
+            var response = await fetch('/dsh-model-lens/api/snapshot', { cache: 'no-store' })
+            if (!response.ok) throw new Error('HTTP ' + response.status)
+            render(await response.json())
+          } catch (error) {
+            fail()
+          }
+        }
+
+        if (window.ResizeObserver) new ResizeObserver(postHeight).observe(card)
+        document.getElementById('cfg-save').addEventListener('click', saveConfig)
+        document.getElementById('cfg-cancel').addEventListener('click', closeConfig)
+        if (hudToggle) {
+          hudToggle.addEventListener('click', function (event) {
+            event.stopPropagation()
+            cancelCutscene()
+            setCollapsed(!collapsed)
+          })
+        }
+        window.addEventListener('message', function (event) {
+          var data = event.data
+          if (!data) return
+          if (data.type === 'dsh-model-lens:pet-action') onPetAction()
+          else if (data.type === 'dsh-model-lens:pet-action-end') {
+            if (cutscene) {
+              cancelCutscene()
+              if (!collapsed) setCollapsed(true)
+            }
+          }
+        })
+        applyPrefs()
+        loadPrefs()
+        load()
+        setInterval(load, 2000)
+        setInterval(loadPrefs, 5000)
+      })()
+    </script>
+  </body>
+</html>

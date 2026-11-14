@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Pet model monitor",
+    "description": "Shows local model status and resource usage beside the desktop pet."
+  }
+}
